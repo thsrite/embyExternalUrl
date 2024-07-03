@@ -126,15 +126,13 @@ async function redirect2Pan(r) {
       if (result === null || result === undefined) {
         return internalRedirect(r);
       }
-      let direct_url  =result.data
-      r.warn(`code ${result.code} ${direct_url}`)
-      if (result.code) {
-            r.warn(`redirect to: ${direct_url}`);
-            // need caller: return;
-            r.return(302, direct_url);
-
-            // async
-            redirectAfter(r, direct_url, cachedRouteDictKey);
+      r.warn(`code ${result.code} ${result.data}`)
+      if (result.code === 0) {
+        if (!!!result.data) {
+          return redirect(r, result.data);
+        }else {
+          return internalRedirect(r);
+        }
         // return `error: fetchDirectPathApi ${result.code} ${result.data}`;
       }
 
