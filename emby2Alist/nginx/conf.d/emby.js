@@ -129,7 +129,7 @@ async function redirect2Pan(r) {
       r.warn(`code ${result.code} ${result.data}`)
       if (result.code) {
         if (result.data) {
-          mediaItemPath = result.data;
+          return redirect(r, result.data);
         }else {
           return internalRedirect(r);
         }
