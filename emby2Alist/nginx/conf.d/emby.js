@@ -126,7 +126,7 @@ async function redirect2Pan(r) {
       if (result === null || result === undefined) {
         return internalRedirect(r);
       }
-      if (result.code == "302") {
+      if (result.code == "0") {
         if (result.data) {
           mediaItemPath = result.data;
         }
