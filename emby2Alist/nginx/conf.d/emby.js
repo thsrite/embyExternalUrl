@@ -482,25 +482,42 @@ async function systemInfoHandler(r) {
 }
 
 async function fetchDirectPathApi(filePath, ua) {
+   const requestBody = {
+     dest_dir: filePath,
+     ua: ua
+  };
   try {
-    const response = await ngx.fetch("http://127.0.0.1:5115?path="+encodeURI(filePath)+"&ua="+ua, {
-      method: "GET",
-      max_response_body_size: 1024
+    const response = await ngx.fetch("http://127.0.0.1:5115", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      max_response_body_size: 65535,
+      body: JSON.stringify(requestBody),
     });
     r.warn(`fetchDirectPathApi response: ${response} ${response.ok} ${response.status}`);
-    if (response.status === 200) {
-      const result = response.responseText;
-      r.warn(`fetchDirectPathApi res: ${result}`);
+    if (response.ok) {
+      const result = await response.json();
       if (result === null || result === undefined) {
-        return `error: direct_path_api response is null`;
+        return `error: fetchDirectPathApi response is null`;
       }
-      return result.url;
+      if (result.code == "0") {
+        if (result.data) {
+          return result.data;
+        }
+        return `error: fetchDirectPathApi ${result.code} ${result.data}`;
+      }
+
+      return `error: fetchDirectPathApi ${result.code} ${result.data}`;
+    } else {
+      return `error: fetchDirectPathApi ${response.status} ${response.statusText}`;
     }
   } catch (error) {
-    r.warn(`error direct_path_api ${error}`);
-    return `error: direct_path_api ${error}`;
+    r.warn(`error fetchDirectPathApi ${error}`);
+    return `error: fetchDirectPathApi ${error}`;
   }
 }
+
 
 async function sendMessage2EmbyDevice(deviceId, header, text, timeoutMs) {
   if (!deviceId) {
