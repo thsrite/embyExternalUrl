@@ -129,7 +129,12 @@ async function redirect2Pan(r) {
       let direct_url  =result.data
       r.warn(`code ${result.code} ${direct_url}`)
       if (result.code) {
-          return redirect(r, direct_url);
+            r.warn(`redirect to: ${direct_url}`);
+            // need caller: return;
+            r.return(302, direct_url);
+
+            // async
+            redirectAfter(r, direct_url, cachedRouteDictKey);
         // return `error: fetchDirectPathApi ${result.code} ${result.data}`;
       }
 
