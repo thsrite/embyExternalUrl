@@ -482,11 +482,11 @@ async function systemInfoHandler(r) {
   return r.return(200, JSON.stringify(body));
 }
 
-async function fetchDirectPathApi(filePath, ua) {
-  r.warn(`fetchDirectPathApi filePath: ${filePath}, ua: ${ua}`)
+async function fetchDirectPathApi(mediaItemPath, ua) {
+  r.warn(`fetchDirectPathApi filePath: ${mediaItemPath}, ua: ${ua}`)
   try {
-    r.warn("http://127.0.0.1:5115?path=" + encodeURI(filePath) + "&ua=" + ua)
-    const response = await ngx.fetch("http://127.0.0.1:5115?path=" + encodeURI(filePath) + "&ua=" + ua, {
+    r.warn("http://127.0.0.1:5115?path=" + encodeURI(mediaItemPath) + "&ua=" + ua)
+    const response = await ngx.fetch("http://127.0.0.1:5115?path=" + encodeURI(mediaItemPath) + "&ua=" + ua, {
       method: "GET",
       max_response_body_size: 65536, // bytes, default 32KB this is 64KB
     });
