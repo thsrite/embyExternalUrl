@@ -482,18 +482,10 @@ async function systemInfoHandler(r) {
 }
 
 async function fetchDirectPathApi(filePath, ua) {
-   const requestBody = {
-     dest_dir: filePath,
-     ua: ua
-  };
   try {
-    const response = await ngx.fetch("http://127.0.0.1:5115", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      max_response_body_size: 65535,
-      body: JSON.stringify(requestBody),
+    const response = await ngx.fetch("http://127.0.0.1:5115?path=" + encodeURI(filePath) + "&ua=" + ua, {
+      method: "GET",
+      max_response_body_size: 1024
     });
     r.warn(`fetchDirectPathApi response: ${response} ${response.ok} ${response.status}`);
     if (response.ok) {
@@ -513,8 +505,8 @@ async function fetchDirectPathApi(filePath, ua) {
       return `error: fetchDirectPathApi ${response.status} ${response.statusText}`;
     }
   } catch (error) {
-    r.warn(`error fetchDirectPathApi ${error}`);
-    return `error: fetchDirectPathApi ${error}`;
+    r.warn(`error direct_path_api ${error}`);
+    return `error: direct_path_api ${error}`;
   }
 }
 
