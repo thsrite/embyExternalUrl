@@ -115,6 +115,7 @@ async function redirect2Pan(r) {
   // strm file inner remote link redirect,like: http,rtsp
   r.warn(`fetch fetchDirectPathApi 302 url`);
   let directUrl = await fetchDirectPathApi(mediaItemPath, ua);
+  r.warn(`fetch fetchDirectPathApi 302 url: ${directUrl}`);
   if (!directUrl.startsWith("error")) {
     mediaItemPath = directUrl;
   } else {
