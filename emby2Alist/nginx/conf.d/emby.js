@@ -127,16 +127,16 @@ async function redirect2Pan(r) {
         return internalRedirect(r);
       }
       r.warn(`code ${result.code} ${result.data}`)
-      if (result.code === 0) {
+      if (result.code) {
         if (result.data) {
           mediaItemPath = result.data;
+        }else {
+          return internalRedirect(r);
         }
-         return internalRedirect(r);
         // return `error: fetchDirectPathApi ${result.code} ${result.data}`;
       }
 
       // return `error: fetchDirectPathApi ${result.code} ${result.data}`;
-         return internalRedirect(r);
     } else {
 
       // return `error: fetchDirectPathApi ${response.status} ${response.statusText}`;
