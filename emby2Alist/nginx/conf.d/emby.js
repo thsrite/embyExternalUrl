@@ -112,47 +112,12 @@ async function redirect2Pan(r) {
   }
   r.warn(`mapped emby file path: ${mediaItemPath}`);
 
-  // strm file inner remote link redirect,like: http,rtsp
-  r.warn(`fetch fetchDirectPathApi 302 url`);
-  try {
-    r.warn("http://127.0.0.1:5115?path=" + encodeURI(mediaItemPath) + "&ua=" + ua)
-    const response = await ngx.fetch("http://127.0.0.1:5115?path=" + encodeURI(mediaItemPath) + "&ua=" + ua, {
-      method: "GET",
-      max_response_body_size: 65536, // bytes, default 32KB this is 64KB
-    });
-    if (response.ok) {
-      const result = await response.json();
-      r.warn(`fetchDirectPathApi result: ${JSON.stringify(result)}`)
-      if (result === null || result === undefined) {
-        return internalRedirect(r);
-      }
-      r.warn(`code ${result.code} ${result.data}`)
-      if (result.code === 0) {
-        if (result.data != null && result.data.length > 0) {
-          return redirect(r, result.data);
-        }else {
-          return internalRedirect(r);
-        }
-        // return `error: fetchDirectPathApi ${result.code} ${result.data}`;
-      }
-
-      // return `error: fetchDirectPathApi ${result.code} ${result.data}`;
-    } else {
-
-      // return `error: fetchDirectPathApi ${response.status} ${response.statusText}`;
-       return internalRedirect(r);
-    }
-  } catch (error) {
-    r.warn(`error direct_path_api ${error}`);
-     return internalRedirect(r);
+  let directUrl = await fetchDirectPathApi(mediaItemPath, ua);
+  if (!directUrl.startsWith("error")) {
+    mediaItemPath = directUrl;
+  } else {
+    return internalRedirect(r);
   }
-
-  // let directUrl = await fetchDirectPathApi(mediaItemPath, ua);
-  // if (!directUrl.startsWith("error")) {
-  //   mediaItemPath = directUrl;
-  // } else {
-  //   return internalRedirect(r);
-  // }
   return redirect(r, mediaItemPath);
 }
 
@@ -515,21 +480,18 @@ async function systemInfoHandler(r) {
 }
 
 async function fetchDirectPathApi(mediaItemPath, ua) {
-  r.warn(`fetchDirectPathApi filePath: ${mediaItemPath}, ua: ${ua}`)
   try {
-    r.warn("http://127.0.0.1:5115?path=" + encodeURI(mediaItemPath) + "&ua=" + ua)
     const response = await ngx.fetch("http://127.0.0.1:5115?path=" + encodeURI(mediaItemPath) + "&ua=" + ua, {
       method: "GET",
       max_response_body_size: 65536, // bytes, default 32KB this is 64KB
     });
-    r.warn(`fetchDirectPathApi response: ${response} ${response.ok} ${response.status}`);
     if (response.ok) {
       const result = await response.json();
       if (result === null || result === undefined) {
         return `error: fetchDirectPathApi response is null`;
       }
-      if (result.code == "0") {
-        if (result.data) {
+       if (result.code === 0) {
+        if (result.data != null && result.data.length > 0) {
           return result.data;
         }
         return `error: fetchDirectPathApi ${result.code} ${result.data}`;
