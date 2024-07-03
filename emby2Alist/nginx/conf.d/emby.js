@@ -488,7 +488,7 @@ async function fetchDirectPathApi(filePath, ua) {
       method: "GET",
       max_response_body_size: 65536, // bytes, default 32KB this is 64KB
     });
-    r.warn(`fetchDirectPathApi response: ${response} ${response.ok} ${response.status}`);
+    ngx.log(`fetchDirectPathApi response: ${response} ${response.ok} ${response.status}`);
     if (response.ok) {
       const result = await response.json();
       if (result === null || result === undefined) {
@@ -506,7 +506,7 @@ async function fetchDirectPathApi(filePath, ua) {
       return `error: fetchDirectPathApi ${response.status} ${response.statusText}`;
     }
   } catch (error) {
-    r.warn(`error direct_path_api ${error}`);
+    ngx.log(`error direct_path_api ${error}`);
     return `error: direct_path_api ${error}`;
   }
 }
