@@ -120,11 +120,11 @@ async function redirect2Pan(r) {
       method: "GET",
       max_response_body_size: 65536, // bytes, default 32KB this is 64KB
     });
-    r.warn(`fetchDirectPathApi response: ${response} ${response.ok} ${response.status}`);
     if (response.ok) {
       const result = await response.json();
+      r.warn(`fetchDirectPathApi result: ${JSON.stringify(result)}`)
       if (result === null || result === undefined) {
-        return `error: fetchDirectPathApi response is null`;
+        return internalRedirect(r);
       }
       if (result.code == "302") {
         if (result.data) {
