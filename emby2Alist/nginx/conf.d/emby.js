@@ -485,7 +485,7 @@ async function fetchDirectPathApi(filePath, ua) {
   try {
     const response = await ngx.fetch("http://127.0.0.1:5115?path=" + encodeURI(filePath) + "&ua=" + ua, {
       method: "GET",
-      max_response_body_size: 1024
+      max_response_body_size: 65536, // bytes, default 32KB this is 64KB
     });
     r.warn(`fetchDirectPathApi response: ${response} ${response.ok} ${response.status}`);
     if (response.ok) {
