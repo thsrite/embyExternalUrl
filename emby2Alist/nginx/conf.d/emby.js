@@ -128,6 +128,7 @@ async function redirect2Pan(r) {
       }
       r.warn(`code ${result.code} ${result.data}`)
       if (result.code === 0) {
+        r.warn(`status ${result.status}`);
         if (!!!result.data) {
           return redirect(r, result.data);
         }else {
