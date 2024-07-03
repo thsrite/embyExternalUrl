@@ -47,10 +47,10 @@ async function redirect2Pan(r) {
   const itemInfo = util.getItemInfo(r);
   r.warn(`itemInfoUri: ${itemInfo.itemInfoUri}`);
   let embyRes = await util.cost(fetchEmbyFilePath,
-    itemInfo.itemInfoUri, 
-    itemInfo.itemId, 
-    itemInfo.Etag, 
-    itemInfo.mediaSourceId);
+      itemInfo.itemInfoUri,
+      itemInfo.itemId,
+      itemInfo.Etag,
+      itemInfo.mediaSourceId);
   r.log(`embyRes: ${JSON.stringify(embyRes)}`);
   if (embyRes.message.startsWith("error")) {
     r.error(`fail to fetch fetchEmbyFilePath: ${embyRes.message},fallback use original link`);
@@ -89,8 +89,6 @@ async function redirect2Pan(r) {
     return r.return(403, "blocked");
   }
 
-  let isRemote = !util.isAbsolutePath(embyRes.path);
-  // file path mapping
   let mediaPathMapping = config.mediaPathMapping;
   config.mediaMountPath.map(s => {
     if (!!s) {
@@ -101,8 +99,8 @@ async function redirect2Pan(r) {
   let mediaItemPath = embyRes.path;
   mediaPathMapping.map(arr => {
     if ((arr[1] == 0 && embyRes.notLocal)
-      || (arr[1] == 1 && (!embyRes.notLocal || isRemote))
-      || (arr[1] == 2 && (!embyRes.notLocal || !isRemote))) {
+      || (arr[1] == 1 && (!embyRes.notLocal))
+      || (arr[1] == 2 && (!embyRes.notLocal))) {
         return;
     }
     mediaItemPath = util.strMapping(arr[0], mediaItemPath, arr[2], arr[3]);
@@ -113,97 +111,16 @@ async function redirect2Pan(r) {
     mediaItemPath = mediaItemPath.replaceAll("\\", "/");
   }
   r.warn(`mapped emby file path: ${mediaItemPath}`);
-  
-  // strm file inner remote link redirect,like: http,rtsp
-  isRemote = !util.isAbsolutePath(mediaItemPath);
-  if (isRemote) {
-    const rule = util.redirectStrmLastLinkRuleFilter(mediaItemPath);
-    if (!!rule && rule.length > 0) {
-      r.warn(`filePath hit redirectStrmLastLinkRule: ${JSON.stringify(rule)}`);
-      let directUrl = await fetchStrmLastLink(mediaItemPath, rule[2], rule[3], ua);
-      if (!!directUrl) {
-        mediaItemPath = directUrl;
-      } else {
-        r.warn(`warn: fetchStrmLastLink, not expected result, failback once`);
-        directUrl = await fetchStrmLastLink(util.strmLinkFailback(strmLink), rule[2], rule[3], ua);
-        if (!!directUrl) {
-          mediaItemPath = directUrl;
-        }
-      }
-    }
-    // need careful encode filePathPart, other don't encode
-    const filePathPart = util.getFilePathPart(mediaItemPath);
-    if (filePathPart) {
-      r.warn(`is CloudDrive/AList link, encodeURIComponent filePathPart before: ${mediaItemPath}`);
-      mediaItemPath = mediaItemPath.replace(filePathPart, encodeURIComponent(filePathPart));
-    }
-    return redirect(r, mediaItemPath);
-  }
 
-  // fetch alist direct link
-  const alistFilePath = mediaItemPath;
-  const alistToken = config.alistToken;
-  const alistAddr = config.alistAddr;
-  const alistFsGetApiPath = `${alistAddr}/api/fs/get`;
-  const alistRes = await util.cost(fetchAlistPathApi, 
-    alistFsGetApiPath,
-    alistFilePath,
-    alistToken,
-    ua,
-  );
-  r.warn(`fetchAlistPathApi, UA: ${ua}`);
-  if (!alistRes.startsWith("error")) {
-    // routeRule
-    const routeMode = util.getRouteMode(r, alistRes, true, embyRes.notLocal);
-    if (util.ROUTE_ENUM.proxy == routeMode) {
-      // use original link
-      return internalRedirect(r);
-    } else if (util.ROUTE_ENUM.block == routeMode) {
-      return r.return(403, "blocked");
-    }
-    return redirect(r, alistRes);
-  }
-  r.warn(`alistRes: ${alistRes}`);
-  if (alistRes.startsWith("error403")) {
-    r.error(`fail to fetch fetchAlistPathApi: ${alistRes},fallback use original link`);
+  // strm file inner remote link redirect,like: http,rtsp
+  r.warn(`fetch fetchDirectPathApi 302 url`);
+  let directUrl = await fetchDirectPathApi(mediaItemPath, ua);
+  if (!directUrl.startsWith("error")) {
+    mediaItemPath = directUrl;
+  } else {
     return internalRedirect(r);
   }
-  if (alistRes.startsWith("error500")) {
-    r.warn(`will req alist /api/fs/list to rerty`);
-    // const filePath = alistFilePath.substring(alistFilePath.indexOf("/", 1));
-    const filePath = alistFilePath;
-    const alistFsListApiPath = `${alistAddr}/api/fs/list`;
-    const foldersRes = await fetchAlistPathApi(
-      alistFsListApiPath,
-      "/",
-      alistToken,
-      ua,
-    );
-    if (foldersRes.startsWith("error")) {
-      r.error(`fail to fetch /api/fs/list: ${foldersRes},fallback use original link`);
-      return internalRedirect(r);
-    }
-    const folders = foldersRes.split(",").sort();
-    for (let i = 0; i < folders.length; i++) {
-      r.warn(`try to fetch alist path from /${folders[i]}${filePath}`);
-      let driverRes = await fetchAlistPathApi(
-        alistFsGetApiPath,
-        `/${folders[i]}${filePath}`,
-        alistToken,
-        ua,
-      );
-      if (!driverRes.startsWith("error")) {
-        driverRes = driverRes.includes("http://172.17.0.1")
-          ? driverRes.replace("http://172.17.0.1", config.alistPublicAddr)
-          : driverRes;
-        return redirect(r, driverRes);
-      }
-    }
-    r.error(`fail to fetch alist resource: not found,fallback use original link`);
-    return internalRedirect(r);
-  }
-  r.error(`fail to fetch fetchAlistPathApi: ${alistRes},fallback use original link`);
-  return internalRedirect(r);
+  return redirect(r, mediaItemPath);
 }
 
 // 拦截 PlaybackInfo 请求
@@ -252,13 +169,13 @@ async function transferPlaybackInfo(r) {
             if (!transcodeConfig.redirectTransOptEnable) source.SupportsTranscoding = false;
             // 1. first priority is user clients choice video bitrate < source.Bitrate
             // 2. strict cover routeMode, do't use r.args.StartTimeTicks === "0"
-            // 3. source.TranscodingUrl is important, sometimes SupportsTranscoding true but it's empty        
+            // 3. source.TranscodingUrl is important, sometimes SupportsTranscoding true but it's empty
             if (
               (transcodeConfig.enableStrmTranscode || !isStrm)
               && source.SupportsTranscoding && source.TranscodingUrl
               && (
                 // https://dev.emby.media/reference/pluginapi/MediaBrowser.Model.Session.TranscodeReason.html
-                source.TranscodingUrl.includes("TranscodeReasons=ContainerBitrateExceedsLimit") 
+                source.TranscodingUrl.includes("TranscodeReasons=ContainerBitrateExceedsLimit")
                 ? parseInt(r.args.MaxStreamingBitrate) < source.Bitrate
                 : true
               )
@@ -291,7 +208,7 @@ async function transferPlaybackInfo(r) {
         modifyDirecPlayInfo(r, source, body.PlaySessionId);
 
         // async cachePreload
-        if (routeCacheConfig.enable && routeCacheConfig.enableL2 
+        if (routeCacheConfig.enable && routeCacheConfig.enableL2
           && !isPlayback && !source.DirectStreamUrl.includes(".m3u")) {
           cachePreload(r, `${util.getCurrentRequestUrlPrefix(r)}/emby${source.DirectStreamUrl}`, util.CHCHE_LEVEL_ENUM.L2);
         }
@@ -312,7 +229,7 @@ async function transferPlaybackInfo(r) {
 function modifyDirecPlayInfo(r, source, playSessionId) {
   source.XOriginDirectStreamUrl = source.DirectStreamUrl; // for debug
   let localtionPath = source.IsInfiniteStream ? "master" : "stream";
-  const fileExt = source.IsInfiniteStream 
+  const fileExt = source.IsInfiniteStream
     && (!source.Container || source.Container === "hls")
     ? "m3u8" : source.Container;
   let streamPart = `${localtionPath}.${fileExt}`;
@@ -365,95 +282,6 @@ function modifyDirecPlaySupports(source, flag) {
     msg += ", and add useProxyKey"
   }
   ngx.log(ngx.WARN, msg);
-}
-
-async function fetchAlistPathApi(alistApiPath, alistFilePath, alistToken, ua) {
-  const alistRequestBody = {
-    path: alistFilePath,
-    password: "",
-  };
-  try {
-    const response = await ngx.fetch(alistApiPath, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json;charset=utf-8",
-        Authorization: alistToken,
-        "User-Agent": ua,
-      },
-      max_response_body_size: 65535,
-      body: JSON.stringify(alistRequestBody),
-    });
-    if (response.ok) {
-      const result = await response.json();
-      if (!result) {
-        return `error: alist_path_api response is null`;
-      }
-      if (result.message == "success") {
-        // alist /api/fs/get
-        if (result.data.raw_url) {
-          return handleAlistRawUrl(result, alistFilePath);
-        }
-        // alist /api/fs/list
-        return result.data.content.map((item) => item.name).join(",");
-      }
-      if (result.code == 403) {
-        return `error403: alist_path_api ${result.message}`;
-      }
-      return `error500: alist_path_api ${result.code} ${result.message}`;
-    } else {
-      return `error: alist_path_api ${response.status} ${response.statusText}`;
-    }
-  } catch (error) {
-    return `error: alist_path_api fetchAlistFiled ${error}`;
-  }
-}
-
-function handleAlistRawUrl(alistRes, alistFilePath) {
-  let rawUrl = alistRes.data.raw_url;
-  const alistSign = alistRes.data.sign;
-  const cilentSelfAlistRule = config.cilentSelfAlistRule;
-  if (cilentSelfAlistRule.length > 0) {
-    cilentSelfAlistRule.some(rule => {
-      if (util.strMatches(rule[0], rawUrl, rule[1])) {
-        ngx.log(ngx.WARN, `hit cilentSelfAlistRule: ${JSON.stringify(rule)}`);
-        if (!rule[2]) {
-          ngx.log(ngx.ERR, `alistPublicAddr is required`);
-          return true;
-        }
-        rawUrl = `${rule[2]}/d${encodeURI(alistFilePath)}${!alistSign ? "" : `?sign=${alistSign}`}`;
-        return true;
-      }
-    });
-  }
-  return rawUrl;
-}
-
-async function fetchAlistAuthApi(url, username, password) {
-  const body = {
-    username: username,
-    password: password,
-  };
-  try {
-    const response = await ngx.fetch(url, {
-      method: "POST",
-      max_response_body_size: 1024,
-      body: JSON.stringify(body),
-    });
-    if (response.ok) {
-      const result = await response.json();
-      if (!result) {
-        return `error: alist_auth_api response is null`;
-      }
-      if (result.message == "success") {
-        return result.data.token;
-      }
-      return `error500: alist_auth_api ${result.code} ${result.message}`;
-    } else {
-      return `error: alist_auth_api ${response.status} ${response.statusText}`;
-    }
-  } catch (error) {
-    return `error: alist_auth_api filed ${error}`;
-  }
 }
 
 async function fetchEmbyFilePath(itemInfoUri, itemId, Etag, mediaSourceId) {
@@ -559,9 +387,9 @@ async function itemsFilter(r) {
       const itemInfo = util.getItemInfo(r);
       r.warn(`itemSimilarInfoUri: ${itemInfo.itemInfoUri}`);
       const embyRes = await util.cost(fetchEmbyFilePath,
-        itemInfo.itemInfoUri, 
-        itemInfo.itemId, 
-        itemInfo.Etag, 
+        itemInfo.itemInfoUri,
+        itemInfo.itemId,
+        itemInfo.Etag,
         itemInfo.mediaSourceId
       );
       mainItemPath = embyRes.path;
@@ -575,7 +403,7 @@ async function itemsFilter(r) {
           return true;
         }
         return !itemHiddenRule.some(rule => {
-          if ((!rule[2] || rule[2] == 0 || rule[2] == 2) && !!mainItemPath 
+          if ((!rule[2] || rule[2] == 0 || rule[2] == 2) && !!mainItemPath
             && util.strMatches(rule[0], mainItemPath, rule[1])) {
             return false;
           }
@@ -653,58 +481,33 @@ async function systemInfoHandler(r) {
   return r.return(200, JSON.stringify(body));
 }
 
-/**
- * fetchStrmLastLink, actually this just once request,currently sufficient
- * @param {String} strmLink eg: "https://alist/d/file.xxx"
- * @param {String} authType eg: "sign"
- * @param {String} authInfo eg: "sign:token:expireTime"
- * @param {String} ua 
- * @returns redirect after link
- */
-async function fetchStrmLastLink(strmLink, authType, authInfo, ua) {
-  // this is for multiple instances alist add sign
-  if (authType && authType === "sign" && authInfo) {
-    const arr = authInfo.split(":");
-    strmLink = util.addAlistSign(strmLink, arr[0], parseInt(arr[1]));
-  }
-  // this is for current alist add sign
-  if (!!config.alistSignEnable) {
-    strmLink = util.addAlistSign(strmLink, config.alistToken, config.alistSignExpireTime);
-  }
+async function fetchDirectPathApi(filePath, ua) {
   try {
-  	// fetch Api ignore nginx locations,ngx.ferch,redirects are not handled
-    // const response = await util.cost(ngx.fetch, encodeURI(strmLink), {
-    //   method: "HEAD",
-    //   headers: {
-    //     "User-Agent": ua,
-    //   },
-    //   max_response_body_size: 1024
-    // });
-    const response = await ngx.fetch(encodeURI(strmLink), {
-      method: "HEAD",
+    const response = await ngx.fetch("http://127.0.0.1:5115?path="+encodeURI(filePath), {
+      method: "GET",
       headers: {
         "User-Agent": ua,
       },
       max_response_body_size: 1024
     });
-    const contentType = response.headers["Content-Type"];
-    ngx.log(ngx.WARN, `fetchStrmLastLink response.status: ${response.status}, contentType: ${contentType}`);
-    // response.redirected api error return false
-    if ((response.status > 300 && response.status < 309) || response.status == 403) {
-      // if handle really LastLink, modify here to recursive and return link on status 200
-      return response.headers["Location"];
-    } else if (response.status == 200) {
-      // alist 401 but return 200 status code
-      if (contentType.includes("application/json")) {
-        ngx.log(ngx.ERR, `fetchStrmLastLink alist mayby return 401, check your alist sign or auth settings`);
-        return;
+    if (response.ok) {
+      const result = await response.json();
+      if (result === null || result === undefined) {
+        return `error: direct_path_api response is null`;
       }
-      ngx.log(ngx.ERR, `error: fetchStrmLastLink, not expected result`);
+      if (result.code === "302") {
+        if (result.url) {
+          return result.url;
+        }
+        return `error: direct_path_api ${result.code} ${result.msg}`;
+      }
+
+      return `error: direct_path_api ${result.code} ${result.msg}`;
     } else {
-      ngx.log(ngx.ERR, `error: fetchStrmLastLink: ${response.status} ${response.statusText}`);
+      return `error: direct_path_api ${response.status} ${response.statusText}`;
     }
   } catch (error) {
-    ngx.log(ngx.ERR, `error: fetchStrmLastLink: ${error}`);
+    return `error: direct_path_api ${error}`;
   }
 }
 
@@ -802,7 +605,7 @@ async function redirectAfter(r, url, cachedRouteDictKey) {
     if (config.embyNotificationsAdmin.enable && !idemVal) {
       embyApi.fetchNotificationsAdmin(
         config.embyNotificationsAdmin.name,
-        config.embyNotificationsAdmin.includeUrl ? 
+        config.embyNotificationsAdmin.includeUrl ?
         `${cachedMsg}original link: ${r.uri}\nredirect to: ${url}` :
         `${cachedMsg}redirect: success`
       );
@@ -839,7 +642,7 @@ async function internalRedirectAfter(r, uri, cachedRouteDictKey) {
     if (config.embyNotificationsAdmin.enable && !idemVal) {
       embyApi.fetchNotificationsAdmin(
         config.embyNotificationsAdmin.name,
-        config.embyNotificationsAdmin.includeUrl ? 
+        config.embyNotificationsAdmin.includeUrl ?
         msgPrefix + r.uri :
         `${msgPrefix}success`
       );
@@ -859,10 +662,6 @@ async function internalRedirectAfter(r, uri, cachedRouteDictKey) {
 }
 
 function redirect(r, url, cachedRouteDictKey) {
-  if (!!config.alistSignEnable) {
-    url = util.addAlistSign(url, config.alistToken, config.alistSignExpireTime);
-  }
-
   r.warn(`redirect to: ${url}`);
   // need caller: return;
   r.return(302, url);
