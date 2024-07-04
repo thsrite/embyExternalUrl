@@ -112,13 +112,32 @@ async function redirect2Pan(r) {
   }
   r.warn(`mapped emby file path: ${mediaItemPath}`);
 
-  let directUrl = await fetchDirectPathApi(mediaItemPath, ua);
-  if (!directUrl.startsWith("error")) {
-    mediaItemPath = directUrl;
-  } else {
+  try {
+    const response = await ngx.fetch("http://127.0.0.1:5115?path=" + encodeURI(mediaItemPath) + "&ua=" + ua, {
+      method: "GET",
+      max_response_body_size: 65536, // bytes, default 32KB this is 64KB
+    });
+    if (response.ok) {
+      const result = await response.json();
+      if (result === null || result === undefined) {
+         return internalRedirect(r);
+      }
+       if (result.code === 0) {
+        if (result.data != null && result.data.length > 0) {
+          return redirect(r, result.data);
+        }
+         return internalRedirect(r);
+      }
+
+      return internalRedirect(r);
+    } else {
+      return internalRedirect(r);
+    }
+  } catch (error) {
+    r.warn(`error direct_path_api ${error}`);
     return internalRedirect(r);
   }
-  return redirect(r, mediaItemPath);
+
 }
 
 // 拦截 PlaybackInfo 请求
